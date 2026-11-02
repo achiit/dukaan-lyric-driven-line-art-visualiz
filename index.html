@@ -1,0 +1,408 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Lyric-driven line-art visualizer</title>
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@300;400&display=swap" rel="stylesheet">
+<style>
+:root{color-scheme:dark;--bg:#000;--fg:#f2efe8;--mut:#8d8a83;--ln:#262626;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--fg);font:15px/1.55 "Cormorant Garamond",Georgia,serif}
+#stage{width:min(100vw,calc(66dvh*9/16));aspect-ratio:9/16;margin:0 auto;background:#000;overflow:hidden}
+body.land #stage{width:min(100vw,calc(56dvh*16/9));aspect-ratio:16/9}
+body.clean #stage{width:min(100vw,calc(100dvh*9/16))}
+body.clean.land #stage{width:min(100vw,calc(100dvh*16/9))}
+svg{display:block;width:100%;height:100%;fill:none;stroke:var(--fg);stroke-linecap:round;stroke-linejoin:round}
+#ui{max-width:560px;margin:0 auto;padding:12px 14px 40px;font:14px/1.5 system-ui,sans-serif}
+body.clean #ui{display:none}
+body.render{overflow:hidden}
+body.render #ui{display:none}
+body.render #stage{position:fixed;inset:0;width:100vw;height:100vh}
+.row{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin:10px 0}
+button,input,select,textarea{font:inherit;color:#f2efe8;background:#0d0d0d;border:1px solid #3a3a3a;border-radius:6px;padding:8px 12px;min-height:40px}
+button:focus-visible,input:focus-visible,select:focus-visible{outline:2px solid #fff;outline-offset:2px}
+input[type=range]{flex:1;padding:0;accent-color:#fff}
+input[type=number]{width:72px}
+input[type=checkbox]{min-height:0}
+textarea{width:100%;min-height:130px}
+.g{display:grid;grid-template-columns:1fr auto;gap:6px 10px;align-items:center}
+.m,small{color:var(--mut)}
+details{border-top:1px solid var(--ln);margin-top:14px;padding-top:8px}
+summary{cursor:pointer;min-height:36px}
+pre{background:#0b0b0b;border:1px solid var(--ln);padding:10px;overflow-x:auto;font-size:12px}
+</style></head>
+<body>
+<div id="stage"><svg id="svg" viewBox="0 0 1080 1920" preserveAspectRatio="xMidYMid slice" role="img" aria-label="Animated line-art scenes that change with every sung line, with subtitles">
+<defs>
+ <filter id="gl" x="-10%" y="-10%" width="120%" height="120%"><feGaussianBlur stdDeviation="3.5" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+ <radialGradient id="bgg" cx="50%" cy="42%" r="80%"><stop id="g0" offset="0" stop-color="#2a0a4a"/><stop offset="1" stop-color="#000"/></radialGradient>
+ <radialGradient id="vg" cx="50%" cy="50%" r="75%"><stop offset="55%" stop-color="#000" stop-opacity="0"/><stop offset="100%" stop-color="#000" stop-opacity=".8"/></radialGradient>
+</defs>
+<rect id="bgr" width="1080" height="1920" fill="url(#bgg)" stroke="none"/>
+<g id="L0"></g><g id="L1"></g>
+<rect id="vgr" width="1080" height="1920" fill="url(#vg)" stroke="none"/>
+<g id="fg">
+ <text id="title" x="540" y="1000" text-anchor="middle" font-family="Cormorant Garamond,Georgia,serif" font-weight="300" font-size="190" letter-spacing="26" stroke-width="2" style="stroke-dasharray:1700"></text>
+ <text id="sub" x="540" y="1090" text-anchor="middle" font-family="Cormorant Garamond,Georgia,serif" font-size="38" letter-spacing="8" stroke="none" style="opacity:0"></text>
+ <g id="amp" stroke-width="3" opacity=".6"></g>
+ <text id="s1" x="540" y="1680" text-anchor="middle" font-family="Cormorant Garamond,Georgia,serif" font-size="50" letter-spacing="2" stroke="none" style="opacity:0"></text>
+ <text id="s2" x="540" y="1745" text-anchor="middle" font-family="Cormorant Garamond,Georgia,serif" font-size="50" letter-spacing="2" stroke="none" style="opacity:0"></text>
+</g></svg></div>
+
+<div id="ui">
+<div class="row"><button id="pp">Play</button><button id="rs">Restart</button><button id="cl">Clean view</button><button id="fs">Fullscreen</button></div>
+<div class="row"><button id="ex" style="flex:1">Render &amp; download MP4</button><select id="exq" aria-label="Video size"><option value="1">Full size</option><option value=".5">Half size (faster)</option></select></div>
+<div class="row"><progress id="exp" value="0" max="1" style="flex:1;display:none"></progress><button id="exc" style="display:none">Cancel</button></div>
+<div class="m" id="exm"></div><a id="exl" style="display:none;color:#fff;font:15px system-ui">Download MP4</a>
+<div class="row"><input id="tn" value="ALFAAZ" placeholder="Song title" aria-label="Song title" style="flex:1"><input id="ta" value="Hamza Malik · Zain Zohaib" placeholder="Artist" aria-label="Artist" style="flex:1"></div>
+<div class="row"><label>Format <select id="fo"><option value="p">Portrait 9:16</option><option value="l">Landscape 16:9</option></select></label>
+<label>Mood <select id="mo"><option value="auto">Auto</option><option value="romantic">Romantic</option><option value="energetic">Energetic</option><option value="melancholic">Melancholic</option><option value="dreamy">Dreamy</option><option value="festive">Festive</option></select></label></div>
+<div class="row"><input id="sc" type="range" min="0" max="60" step="0.01" value="0" aria-label="Timeline"><span id="tl" class="m">0.0 / 60.0</span></div>
+<div class="m" id="mn"></div><div class="m" id="scn"></div>
+<div class="row"><label><input id="lp" type="checkbox" checked> Loop</label><label><input id="gw" type="checkbox"> Soft glow</label><label><input id="am" type="checkbox" checked> Amplitude bars</label></div>
+
+<details open><summary>1. Song</summary>
+<div class="row"><input id="fi" type="file" accept="audio/*"><span id="an" class="m">No file loaded</span></div>
+<div class="g"><span>Song start point (s)</span><input id="as" type="number" step="0.1" min="0" value="0">
+<span>Visual nudge (s): <b id="nv">0.00</b></span><input id="nu" type="range" min="-2" max="2" step="0.05" value="0"></div>
+<small>Without a song the page shows a 60 second demo. Everything runs on your device.</small></details>
+
+<details open><summary>2. Lyrics (new picture for every line)</summary>
+<p class="m" style="margin:4px 0">Paste your own lyrics, one line per line. Each line becomes its own scene, drawn from the words in it (moon, heart, rain, rose, eyes, road…). Works with Roman Hindi/Urdu, Devanagari, Urdu script and English. Lines with no known word get a mood-based picture. For exact timing use Start stamping, or paste lines like [01:23.50] text.</p>
+<textarea id="ly" placeholder="Paste lyrics here" aria-label="Lyrics"></textarea>
+<div class="g"><span>First line starts at (s)</span><input id="ls" type="number" step="0.5" min="0" value="8">
+<span>Scene length without lyrics (s)</span><input id="sl" type="number" step="0.5" min="2" value="5">
+<span>Title length at the end (s)</span><input id="td" type="number" step="1" min="3" value="8"></div>
+<div class="row"><button id="la">Apply lyrics</button><button id="lst">Start stamping</button><button id="ltp">Tap: next line</button><button id="lc">Clear</button></div>
+<div class="m" id="ln"></div></details>
+
+<details><summary>Export to MP4, Android, troubleshooting</summary>
+<p><b>This page is a live preview, not an MP4.</b></p>
+<p><b>Easiest:</b> load song and lyrics, tap Clean view, Fullscreen, start the screen recorder (Android: Quick Settings → Screen record, device audio on Android 14+), then Play.</p>
+<p><b>Automatic (PC, Python + Node + ffmpeg):</b> <code>python make_video.py song.mp3 --language hi --land</code> transcribes the lyrics, finds the mood, and renders a new MP4 per song. Many songs: <code>python make_video.py *.mp3</code>.</p>
+<p><b>Troubleshooting:</b> choppy on Android: switch off glow and amplitude bars, close other tabs. No sound: tap Play once. Wrong pictures: edit the lyrics or add keywords, scenes follow the words. Out of sync: change the start point or nudge.</p>
+</details></div>
+
+<script src="https://cdn.jsdelivr.net/npm/mp4-muxer@5.1.3/build/mp4-muxer.js"></script>
+<script>
+const NS='http://www.w3.org/2000/svg',$=s=>document.querySelector(s);
+const mk=(n,a={},p)=>{const e=document.createElementNS(NS,n);for(const k in a)e.setAttribute(k,a[k]);p&&p.appendChild(e);return e};
+const hs=n=>{const x=Math.sin(n*127.1+311.7)*43758.5453;return x-Math.floor(x)};
+const cl=(x,a=0,b=1)=>Math.min(b,Math.max(a,x)),ease=x=>x<.5?2*x*x:1-Math.pow(-2*x+2,2)/2,lerp=(a,b,k)=>a+(b-a)*k;
+const mixc=(a,b,k)=>{const p=h=>[1,3,5].map(i=>parseInt(h.slice(i,i+2),16)),A=p(a),B=p(b);return'#'+A.map((v,i)=>Math.round(lerp(v,B[i],k)).toString(16).padStart(2,'0')).join('')};
+let W=1080,HT=1920,BX0=90,BY=1860,BH=90,SEED=0,TD=8,SL=5,FL=0;
+let FE=null,FN=0,aS=0,nud=0,hasA=false,songLen=0,MOOD='romantic',MOODSEL='auto',TITLE='ALFAAZ',ARTIST='Hamza Malik · Zain Zohaib';
+let shots=[],LY=[],KWL=[],plain=[],sIdx=-1,stamps={},playing=false,t=0,last=0;
+const sc=$('#sc'),s1=$('#s1'),s2=$('#s2'),layers=[$('#L0'),$('#L1')],ampG=$('#amp');
+const lenAll=()=>FL||(hasA?Math.max(20,songLen-aS):60);
+const TL=lenAll;
+function setLen(){const L=TL();sc.max=L;buildShots()}
+
+/* ---------- audio analysis ---------- */
+function F(x){
+ if(!FE)return{b:.25+.2*Math.sin(x*2.1),tr:.2+.15*Math.sin(x*3.3),a:.3,on:0};
+ const k=(cl(Math.floor((aS+x+nud)*30),0,FN-1)|0)*4;return{b:FE[k],tr:FE[k+1],a:FE[k+2],on:FE[k+3]}}
+function onsetAge(x){for(let j=0;j<15;j++)if(F(x-j/30).on)return j/30;return -1}
+async function loadBuf(ab){
+ const ctx=new(window.AudioContext||window.webkitAudioContext)();
+ const buf=await ctx.decodeAudioData(ab.slice(0)),sr=buf.sampleRate,d=buf.getChannelData(0),hop=Math.floor(sr/30),n=Math.floor(d.length/hop);
+ const RB=new Float32Array(n),RT=new Float32Array(n),RA=new Float32Array(n);let lp=0;const al=1-Math.exp(-2*Math.PI*160/sr);
+ for(let f=0;f<n;f++){let sb=0,st=0,sa=0;const o=f*hop;
+  for(let i=0;i<hop;i++){const x=d[o+i];lp+=al*(x-lp);const hp=x-lp;sb+=lp*lp;st+=hp*hp;sa+=x*x}
+  RB[f]=Math.sqrt(sb/hop);RT[f]=Math.sqrt(st/hop);RA[f]=Math.sqrt(sa/hop);if(f%900===0)await new Promise(r=>setTimeout(r,0))}
+ const nrm=a=>{let m=1e-6;for(const v of a)m=Math.max(m,v);for(let i=0;i<a.length;i++)a[i]/=m};nrm(RB);nrm(RT);nrm(RA);
+ FE=new Float32Array(n*4);
+ for(let f=0;f<n;f++){const k=f*4;FE[k]=RB[f];FE[k+1]=RT[f];FE[k+2]=RA[f];let s=0,c=0;for(let j=Math.max(0,f-15);j<f;j++){s+=RB[j];c++}
+  FE[k+3]=(RB[f]>(c?s/c:0)*1.35+.02&&RB[f]>(f>0?RB[f-1]:0)*1.05)?1:0}
+ FN=n;hasA=true;ctx.close();songLen=n/30;ABUF=buf;
+ applyMood(MOODSEL==='auto'?detectMood():MOODSEL);setLen()}
+
+/* ---------- mood ---------- */
+const PAL={
+ romantic:{bg:'#3a0a1e',line:'#ffd6e8',acc:'#ff6fa5',star:'#ffe9f3',alt:['#ff8fb8','#ffb3c6','#e0a3ff']},
+ energetic:{bg:'#2a0a4a',line:'#7ef9ff',acc:'#ff3dcf',star:'#fff7a6',alt:['#ffe600','#39ff88','#ff7a1a']},
+ melancholic:{bg:'#06203d',line:'#bfe3ff',acc:'#5f9dff',star:'#dbeaff',alt:['#8fb8ff','#9be7ff','#c5b8ff']},
+ dreamy:{bg:'#2a1450',line:'#f5e6ff',acc:'#c7a8ff',star:'#fff3d6',alt:['#ffd6f5','#b8f0ff','#ffe6a8']},
+ festive:{bg:'#3d2400',line:'#ffe27a',acc:'#ff9f1c',star:'#ffffff',alt:['#ff4d6d','#4dd2ff','#7dff6b']}};
+const FB={romantic:['heart','rose','moon','couple','stars','flower','ring','butterfly'],energetic:['bolt','flame','city','sun','road','bird','spiral','stars'],
+ melancholic:['rain','tear','moon','person','clock','cloud','snow','road'],dreamy:['cloud','moon','butterfly','stars','boat','flower','bird','sea'],festive:['candle','sun','flame','flower','stars','notes','ring','city']};
+function detectMood(){const n=Math.max(1,FN);let e=0,on=0,tr=0,bs=0;for(let i=0;i<FN;i++){const k=i*4;e+=FE[k+2];on+=FE[k+3];tr+=FE[k+1];bs+=FE[k]}
+ e/=n;const rate=on/(n/30),br=(tr+1e-6)/(bs+1e-6);
+ return rate>2.5&&e>.45?'energetic':rate>1.6&&br>.9?'festive':e<.35&&br<.8?'melancholic':br>1.1?'dreamy':'romantic'}
+function applyMood(m){if(!PAL[m])m='romantic';MOOD=m;const p=PAL[m];
+ document.documentElement.style.setProperty('--fg',p.line);
+ for(const e of [$('#title'),$('#sub'),s1,s2])e.style.fill=p.line;
+ $('#mn').textContent='Mood: '+m;buildShots()}
+
+/* ---------- motif library (line art, each fits a 400x400 box) ---------- */
+const C=(x,y,r)=>`M${x-r},${y}a${r},${r} 0 1,0 ${2*r},0a${r},${r} 0 1,0 ${-2*r},0Z`;
+const R=(d,a=0,s=1,x=0,y=0)=>({d,tr:`translate(${x} ${y}) rotate(${a}) scale(${s})`});
+const ray=(n,r1,r2,o=0)=>Array.from({length:n},(_,i)=>{const a=i/n*6.2832+o,c=Math.cos(a),s=Math.sin(a);return`M${c*r1},${s*r1}L${c*r2},${s*r2}`});
+const P0='M0,0C-62,-30 -66,-120 0,-160C66,-120 62,-30 0,0Z';
+const PEO=['M-34,-250a34,34 0 1,0 68,0a34,34 0 1,0 -68,0','M-36,-252C-44,-300 40,-306 38,-250','M-30,-232C-62,-190 -54,-150 -74,-118','M-8,-214C-40,-150 -50,-60 -58,0L58,0C50,-60 40,-150 8,-214','M-14,-196C-44,-150 -38,-110 -20,-92','M14,-196C44,-150 38,-110 20,-92'];
+const ppl=(x,y,s,dir)=>PEO.map(d=>({d,tr:`translate(${x} ${y}) scale(${dir*s} ${s})`}));
+const CLOUD='M-130,40C-190,40 -190,-50 -120,-50C-110,-120 30,-130 50,-60C130,-80 190,10 130,40Z';
+const M={
+ heart:()=>['M0,150C-210,-10 -120,-170 0,-70C120,-170 210,-10 0,150Z','M-95,-70C-120,-30 -95,0 -55,30'],
+ moon:()=>['M60,-170A170,170 0 1,0 150,100A150,150 0 1,1 60,-170Z',C(-60,-70,6),C(-90,30,4)],
+ sun:()=>[C(0,0,85),...ray(14,115,175)],
+ stars:()=>[...ray(8,22,150),...ray(8,12,80,.39),C(0,0,12)],
+ rose:()=>[R(P0,-58,.8,0,-30),R(P0,58,.8,0,-30),R(P0,-30,.9,0,-30),R(P0,30,.9,0,-30),R(P0,0,.85,0,-30),'M0,-90C-20,-90 -22,-120 0,-122C24,-124 26,-92 6,-88','M0,30C-20,90 20,140 0,200','M0,120C-70,90 -100,110 -120,140C-70,150 -30,140 0,120Z'],
+ flower:()=>[C(0,-40,26),...[0,1,2,3,4,5].map(i=>C(Math.cos(i*1.0472)*62,Math.sin(i*1.0472)*62-40,38)),'M0,40C10,100 -10,140 0,195'],
+ eye:()=>['M-170,0C-80,-100 80,-100 170,0C80,100 -80,100 -170,0Z',C(0,0,48),C(0,0,16),'M-120,-62L-140,-102','M0,-86L0,-130','M120,-62L140,-102'],
+ tear:()=>['M0,-170C60,-70 100,-10 100,50A100,100 0 1,1 -100,50C-100,-10 -60,-70 0,-170Z','M-55,40C-55,70 -35,95 -5,100'],
+ cloud:()=>[CLOUD],
+ rain:()=>[R(CLOUD,0,1,0,-70),...Array.from({length:9},(_,i)=>{const x=-120+i*30,y=10+(i%3)*25;return`M${x},${y}L${x-20},${y+60}`})],
+ sea:()=>[0,1,2,3].map(i=>`M-200,${-60+i*55}q50,-45 100,0t100,0t100,0t100,0`),
+ mountain:()=>['M-200,130L-60,-90L20,20L90,-50L200,130Z','M-60,-90L-98,-30L-62,-46L-30,-24'],
+ door:()=>['M-100,160V-40A100,120 0 0,1 100,-40V160Z','M-45,160V-30A45,70 0 0,1 45,-30V160',C(25,70,6),'M-200,160H200'],
+ road:()=>['M-60,-60L-200,170','M60,-60L200,170','M-200,-60H200','M0,-55V-25','M0,-5V35','M0,60V120',C(0,-130,38)],
+ bird:()=>['M-170,20C-100,-70 -30,-40 0,10C30,-40 100,-70 170,20C100,-10 40,10 0,60C-40,10 -100,-10 -170,20Z'],
+ butterfly:()=>['M0,0C-90,-130 -190,-70 -150,10C-190,80 -90,110 0,10Z','M0,0C90,-130 190,-70 150,10C190,80 90,110 0,10Z','M0,-40V90','M0,-40C-20,-90 -40,-100 -50,-95','M0,-40C20,-90 40,-100 50,-95'],
+ flame:()=>['M0,-190C40,-110 130,-60 110,50C100,130 40,170 0,170C-60,170 -120,120 -100,40C-90,0 -50,-30 -30,-80C-10,-50 -10,-90 0,-190Z','M0,-20C30,30 50,60 30,110C10,140 -30,130 -35,90C-40,50 -10,40 0,-20Z'],
+ clock:()=>[C(0,0,150),...Array.from({length:12},(_,i)=>{const a=i*.5236,c=Math.cos(a),s=Math.sin(a);return`M${c*125},${s*125}L${c*142},${s*142}`}),'M0,0V-95','M0,0L65,35'],
+ ring:()=>[C(-38,40,88),C(38,40,88),'M0,-150L38,-108L0,-66L-38,-108Z','M-38,-108H38'],
+ couple:()=>[...ppl(-85,150,.75,1),...ppl(85,150,.75,-1),'M-45,-60C-20,-110 20,-110 45,-60','M0,-135C-30,-175 -60,-150 0,-110C60,-150 30,-175 0,-135Z'],
+ person:()=>[...ppl(0,170,1.05,1),'M-200,170H200'],
+ bolt:()=>['M40,-190L-60,10H0L-40,190L90,-30H20Z'],
+ wind:()=>['M-200,-60C-100,-60 -60,-120 0,-100C60,-80 40,-20 -10,-30','M-200,10H60C140,10 170,-40 120,-70','M-200,80H20C80,80 110,130 60,150'],
+ notes:()=>['M-70,90a30,22 0 1,0 60,0a30,22 0 1,0 -60,0Z','M-10,90V-120','M70,130a30,22 0 1,0 60,0a30,22 0 1,0 -60,0Z','M130,130V-60','M-10,-120L130,-60','M130,-60C170,-40 190,0 180,40'],
+ boat:()=>['M-130,60H130L90,130H-90Z','M0,60V-150','M10,-140L110,40H10Z','M-10,-100L-90,40H-10Z','M-200,165q50,-35 100,0t100,0t100,0t100,0'],
+ tree:()=>['M0,170C-5,100 -5,20 0,-20','M0,40C-50,0 -80,-20 -110,-60','M0,10C50,-30 80,-50 110,-90',C(-110,-70,34),C(110,-100,34),C(0,-60,44)],
+ snow:()=>[...ray(6,0,150),...[0,1,2,3,4,5].flatMap(i=>{const a=i*1.0472,x=Math.cos(a)*100,y=Math.sin(a)*100;return[`M${x},${y}L${x+Math.cos(a+.6)*40},${y+Math.sin(a+.6)*40}`,`M${x},${y}L${x+Math.cos(a-.6)*40},${y+Math.sin(a-.6)*40}`]})],
+ candle:()=>['M-85,100H85L62,155H-62Z','M0,-25C22,15 32,40 0,75C-32,40 -22,15 0,-25Z',C(0,25,70)],
+ spiral:()=>{let d='M0,0';for(let i=1;i<=120;i++){const a=i*.17,r=i*1.6;d+=`L${Math.cos(a)*r},${Math.sin(a)*r}`}return[d]},
+ city:()=>['M-200,170V30H-150V-40H-100V70H-60V-90H0V10H40V-30H90V50H140V-60H200V170Z','M-130,60V90M-80,100V130M-40,-60V-30M20,40V70M110,20V50M170,-30V0'],
+ quill:()=>['M120,-170C20,-100 -60,0 -150,170C-60,130 40,40 120,-170Z','M-150,170L-190,190','M-60,60C-20,40 20,10 50,-40','M-120,190H-30']};
+const MC={heart:'#ff5d8f',moon:'#cfe3ff',sun:'#ffc233',stars:'#fff3d6',rose:'#ff3b5c',flower:'#ff8fd0',eye:'#7ef9ff',tear:'#6bb7ff',cloud:'#d6e4ff',rain:'#6bb7ff',sea:'#3fd6c6',mountain:'#b8a6ff',door:'#ffd27a',road:'#ffa96b',bird:'#9be7ff',butterfly:'#ff9de2',flame:'#ff7a2a',clock:'#ffe6a8',ring:'#ffd6e8',couple:'#ffb3d1',person:'#e6e6ff',bolt:'#fff27a',wind:'#bff0ff',notes:'#c7a8ff',boat:'#8fd3ff',tree:'#7dff9b',snow:'#e6f6ff',candle:'#ffb347',spiral:'#c7a8ff',city:'#ff9fd0',quill:'#ffe9c2'};
+
+/* ---------- words to pictures (Roman, Devanagari, Urdu, English) ---------- */
+const KW=[
+['moon',/^(chaa?nd|chandni|moon|mehtab|raat|raaton|night|चाँद|चांद|चाँदनी|रात|چاند|رات)/],
+['stars',/^(taare|tare|sitare|sitaare|taaron|star|stars|asmaan|aasman|asman|sky|falak|तारे|तारों|सितारे|आसमान|ستار|آسمان)/],
+['heart',/^(dil|dilbar|heart|pyaar|pyar|ishq|ishk|mohabbat|muhabbat|mohabat|love|loved|दिल|प्यार|इश्क|इश्क़|मोहब्बत|दिलबर|پیار|عشق|محبت)/],
+['rose',/^(gulaab|gulab|rose|roses|गुलाब|گلاب)/],
+['flower',/^(phool|phul|flower|flowers|bahaar|bahar|bagh|baag|khushbu|kali|फूल|बहार|बाग|खुशबू|پھول|بہار|باغ)/],
+['eye',/^(aankh|aankhe|aankhon|ankhen|ankhein|nazar|nazrein|nazre|nain|naina|eye|eyes|dekh|dikh|deedar|आँख|आंख|आँखें|आंखों|नज़र|नजर|नैन|देख|آنکھ|نظر|دیکھ)/],
+['tear',/^(aansu|aansoo|ansu|rona|roya|roye|ro|tear|tears|cry|crying|gham|dard|pain|judaai|judai|bichhad|bichad|alvida|आँसू|आंसू|रो|ग़म|गम|दर्द|जुदाई|बिछड़|अलविदा|آنسو|غم|درد|جدائی)/],
+['rain',/^(baarish|barish|rain|saawan|sawan|barsaat|megh|badal|badlon|बारिश|सावन|बरसात|बादल|بارش|ساون|بادل)/],
+['sun',/^(suraj|sooraj|dhoop|dhup|sun|sunshine|roshni|ujala|ujaala|subah|savera|din|morning|सूरज|धूप|रोशनी|उजाला|सुबह|सवेरा|سورج|دھوپ|روشنی|صبح)/],
+['sea',/^(samundar|samandar|sagar|darya|dariya|sea|ocean|lehar|lehr|lahar|wave|waves|nadi|river|paani|pani|water|kinara|sahil|समंदर|समुंदर|सागर|दरिया|लहर|नदी|पानी|किनारा|سمندر|دریا|لہر|پانی|ساحل)/],
+['mountain',/^(pahaad|pahad|parbat|mountain|mountains|पहाड़|पर्वत|پہاڑ)/],
+['door',/^(ghar|house|home|dehleez|darwaza|darwaaza|door|khidki|aangan|घर|दरवाज़ा|दरवाजा|खिड़की|आँगन|گھر|دروازہ|کھڑکی)/],
+['road',/^(raasta|rasta|raah|rah|safar|road|way|manzil|musafir|chalna|chalo|chal|jaana|jaane|journey|सफर|सफ़र|राह|रास्ता|मंज़िल|मंजिल|मुसाफिर|चल|راستہ|راہ|سفر|منزل|مسافر)/],
+['bird',/^(pankh|parinda|panchi|udna|udaan|udd|ud|bird|birds|azaad|aazad|free|fly|flying|wings|पंख|परिंदा|पंछी|उड़|आज़ाद|آزاد|پرندہ|اڑ)/],
+['butterfly',/^(titli|butterfly|तितली|تتلی)/],
+['flame',/^(aag|fire|jalna|jalta|jale|jala|shola|sholay|tapish|dhuan|burn|burning|flame|आग|जल|शोला|तपिश|धुआँ|آگ|جل|شعلہ)/],
+['clock',/^(waqt|vakt|time|ghadi|clock|intezaar|intezar|intazaar|pal|lamha|lamhe|yaad|yaadein|yaadon|memory|memories|वक़्त|वक्त|घड़ी|इंतज़ार|इंतजार|पल|लम्हा|याद|وقت|گھڑی|انتظار|لمحہ|یاد)/],
+['ring',/^(haath|haathon|hath|hand|hands|thaam|thaama|vaada|waada|wada|promise|kasam|nikah|shaadi|shadi|saath|saathi|together|ring|हाथ|थाम|वादा|कसम|निकाह|शादी|साथ|ہاتھ|تھام|وعدہ|قسم|نکاح|ساتھ)/],
+['couple',/^(tum|tumhe|tumhari|tumhara|tu|tujhe|tujhko|tera|teri|tere|you|your|sanam|jaan|jaanu|mehboob|mahboob|yaar|piya|saajan|sajna|humsafar|humdum|hamdam|तुम|तू|तुझे|तेरा|तेरी|तेरे|सनम|जान|महबूब|यार|पिया|साजन|हमसफ़र|تم|تو|تجھے|تیرا|تیری|صنم|جان|محبوب|یار)/],
+['person',/^(main|mai|mera|meri|mere|mujhe|mujhko|me|my|i|akela|akele|akeli|tanha|tanhai|tanhaai|alone|lonely|मैं|मेरा|मेरी|मेरे|मुझे|अकेला|अकेली|तन्हा|तन्हाई|میرا|میری|مجھے|اکیلا|تنہا|تنہائی)/],
+['bolt',/^(bijli|bijlee|toofan|tufaan|storm|lightning|aandhi|बिजली|तूफ़ान|तूफान|आँधी|بجلی|طوفان|آندھی)/],
+['wind',/^(hawa|hawaa|hava|wind|breeze|jhonka|jhonke|हवा|झोंका|ہوا|جھونکا)/],
+['notes',/^(gaana|gana|geet|sur|sangeet|music|song|dhun|awaaz|awaz|voice|alfaaz|alfaz|lafz|lafzon|words|baat|baatein|kehna|kahna|bol|zubaan|shayari|ghazal|nagma|गाना|गीत|सुर|संगीत|धुन|आवाज़|आवाज|अल्फाज़|अल्फ़ाज़|लफ्ज़|बात|कहना|बोल|ज़ुबान|शायरी|ग़ज़ल|گانا|گیت|سر|آواز|الفاظ|لفظ|بات|کہنا|بول|شاعری|غزل)/],
+['boat',/^(kashti|naav|nao|boat|ship|कश्ती|नाव|کشتی)/],
+['tree',/^(ped|darakht|tree|patta|patte|jungle|पेड़|दरख़्त|पत्ता|पत्ते|جنگل|درخت|پتہ)/],
+['snow',/^(barf|snow|sardi|sardiyan|winter|बर्फ़|बर्फ|सर्दी|برف|سردی)/],
+['candle',/^(diya|deepak|diye|chiragh|chirag|shama|candle|roshan|light|दीया|दीपक|चिराग़|चिराग|शमा|روشن|چراغ|شمع)/],
+['spiral',/^(deewana|deewani|diwana|diwani|pagal|crazy|mad|दीवाना|दीवानी|पागल|دیوانہ|دیوانی|پاگل)/],
+['city',/^(shehar|sheher|city|gali|galiyan|mehfil|mela|शहर|गली|महफ़िल|महफिल|मेला|شہر|گلی|محفل)/],
+['quill',/^(khat|khatt|likh|likha|kalam|kitaab|kitab|pen|letter|write|खत|ख़त|लिख|कलम|किताब|خط|لکھ|قلم|کتاب)/],
+['cloud',/^(dhundh|kohra|cloud|clouds|khwaab|khwab|sapna|sapne|neend|dream|dreams|धुंध|कोहरा|ख़्वाब|ख्वाब|सपना|सपने|नींद|دھند|خواب|سپنا|نیند)/]];
+
+KW.forEach(e=>{const m=e[1].source.match(/^\^\((.*)\)$/);e[1]=new RegExp('^(?:'+m[1].split('|').map(a=>/^[a-z]{1,3}$/.test(a)?a+'$':a).join('|')+')')});
+/* ---------- shots: one new scene per sung line ---------- */
+const kwText=(x,a,b)=>x+' '+KWL.filter(l=>l.t>=a-1.5&&l.t<=b).map(l=>l.x).join(' ');
+const pick=(arr,n)=>arr[Math.floor(hs(n)*arr.length)];
+function motifsFor(text,k,prev){
+ const found=[];
+ for(const w of text.toLowerCase().split(/[\s,.;:!?'"“”‘’\-–—()\[\]|/।۔،]+/)){if(!w)continue;for(const[m,re]of KW)if(re.test(w)){if(!found.includes(m))found.push(m);break}}
+ found.sort((a,b)=>(a==='couple'||a==='person')-(b==='couple'||b==='person'));
+ const fb=FB[MOOD];let ms=found.slice(0,3);
+ if(!ms.length){ms=[pick(fb,SEED*.7+k*3.1)];const b=pick(fb,SEED*.3+k*5.3+1);if(b!==ms[0])ms.push(b)}
+ else if(ms.length===1&&hs(SEED+k*9)<.6){const b=pick(fb,SEED*.4+k*2.7);if(b!==ms[0])ms.push(b)}
+ if(prev&&prev[0]===ms[0]){if(ms.length>1)ms=[ms[1],ms[0],...ms.slice(2)];else ms=[pick(fb.filter(x=>x!==ms[0]),SEED+k*2.3),ms[0]]}
+ return ms}
+function buildShots(){
+ const L=TL(),E5=Math.max(4,L-TD),pal=PAL[MOOD];shots=[];let k=0,cur=0,prev=null;
+ const add=(t0,t1,text)=>{let a=t0;while(a<t1-.01){let b=Math.min(t1,a+(text?7:SL+hs(SEED+k)*2));if(t1-b<2)b=t1;
+   const ms=motifsFor(kwText(text,a,b),k,prev);prev=ms;
+   shots.push({t0:a,ms,k,c0:mixc(MC[ms[0]],pal.line,.15),c1:mixc(MC[ms[1]||'stars'],pal.acc,.15),cm:pal.alt[k%3],cs:k%2?pal.star:pal.alt[(k+1)%3],lyric:!!text});k++;a=b}};
+ for(let i=0;i<LY.length;i++){const l=LY[i];if(l.t>=E5)break;
+  if(l.t-cur>1.5)add(cur,l.t,'');
+  const nx=LY[i+1],end=Math.min(E5,nx?nx.t:l.t+6),a=Math.max(cur,l.t);
+  if(end>a){add(a,Math.max(end,a+1),l.x||'');cur=Math.max(cur,end)}}
+ if(cur<E5)add(cur,E5,'');
+ shots.push({t0:E5,ms:['moon','stars'],k:k++,c0:'#dfe8ff',c1:pal.acc,cm:pal.alt[0],cs:pal.star,title:true});
+ for(const g of layers)g.b=-1}
+function idx(x){let lo=0,hi=shots.length-1;while(lo<hi){const m=(lo+hi+1)>>1;if(shots[m].t0<=x)lo=m;else hi=m-1}return lo}
+
+function buildLayer(g,s){
+ g.textContent='';g.b=s.k;g.items=[];g.amb=[];g.trl=[];g.orbit=null;
+ const sz=Math.min(W,HT)*.62/400,h=n=>hs(SEED*.91+s.k*11.3+n),Pt=W<HT,[m0,m1,m2]=s.ms;
+ const lay=m1?Math.floor(h(1)*4):[0,2,3][Math.floor(h(1)*3)];
+ const place=(m,x,y,sc,rot,col,o,len,par=g)=>{const gg=mk('g',{transform:`translate(${x} ${y}) rotate(${rot}) scale(${sc})`},par);
+  M[m]().forEach((it,i)=>{if(typeof it==='string')it={d:it,tr:''};const e=mk('path',{d:it.d,pathLength:1,transform:it.tr,stroke:col,'stroke-width':3.2/sc},gg);
+   if(it.d.endsWith('Z')){e.setAttribute('fill',col);e.setAttribute('fill-opacity',.13)}
+   e.style.strokeDasharray='1 2';g.items.push({e,o:o+i*.04,l:len})})};
+ for(let i=0;i<36;i++){const e=mk('circle',{cx:h(20+i)*W*1.2-W*.1,cy:h(60+i)*HT,r:1+h(100+i)*2.4,fill:i%4?s.cs:s.cm,stroke:'none'},g);g.amb.push({e,p:h(140+i)*6.28,sp:.8+h(180+i)*1.6})}
+ for(let j=0;j<2;j++){const e=mk('path',{d:`M-100,${HT*(.2+.5*h(300+j))}C${W*.3},${HT*h(310+j)} ${W*.6},${HT*h(320+j)} ${W+100},${HT*h(330+j)}`,stroke:s.cm,'stroke-width':2,opacity:.35},g);e.style.strokeDasharray='120 500';g.trl.push(e)}
+ if(lay===0){place(m0,W/2,HT*.46,sz,0,s.c0,0,2.2);if(m1)place(m1,W*.78,Pt?HT*.2:HT*.25,sz*.4,h(5)*30-15,s.c1,.5,1.6);if(m2)place(m2,W*.22,HT*.78,sz*.36,h(6)*30-15,s.cm,.8,1.6)}
+ else if(lay===1){if(Pt){place(m0,W/2,HT*.3,sz*.95,0,s.c0,0,2);place(m1,W/2,HT*.66,sz*.95,0,s.c1,.6,2)}else{place(m0,W*.3,HT/2,sz*.95,0,s.c0,0,2);place(m1,W*.7,HT/2,sz*.95,0,s.c1,.6,2)}
+  if(m2)place(m2,W/2,HT*(Pt?.48:.18),sz*.3,0,s.cm,1.2,1.2)}
+ else if(lay===2){place(m0,W/2,HT*.46,sz*1.05,0,s.c0,0,2.2);g.orbit=mk('g',{},g);const om=m1||'stars';
+  for(let i=0;i<6;i++){const a=i/6*6.2832;place(om,Math.cos(a)*sz*290,Math.sin(a)*sz*290,sz*.2,a*57,i%2?s.c1:s.cm,.5+i*.15,1.2,g.orbit)}}
+ else{const gy=HT*.74,e=mk('path',{d:`M${-W},${gy}H${2*W}`,pathLength:1,stroke:s.cm,'stroke-width':2},g);e.style.strokeDasharray='1 2';g.items.push({e,o:.1,l:1.4});
+  place(m0,W/2,gy-sz*.9*165,sz*.9,0,s.c0,0,2.2);if(m1)place(m1,W*.74,HT*.2,sz*.45,0,s.c1,.6,1.6);if(m2)place(m2,W*.24,HT*.24,sz*.3,0,s.cm,1,1.4)}
+ g.ring=mk('circle',{cx:W/2,cy:HT*.46,r:10,stroke:s.c0,'stroke-width':2,opacity:0},g)}
+
+function drawShot(li,s,x,al,nt){
+ const g=layers[li];if(g.b!==s.k)buildLayer(g,s);
+ const tt=x-s.t0,D=Math.max(1,nt-s.t0),f=F(x),RR=Math.min(W,HT)*.31;
+ for(const it of g.items){const p=cl((tt-it.o)/it.l);it.e.style.strokeDashoffset=1-ease(p);it.e.style.opacity=p>0?1:0}
+ const z=1+.08*cl(tt/D)+.025*f.b,r=Math.sin(s.k*1.7)*1.2+Math.sin(tt*.3)*.8;
+ g.setAttribute('transform',`translate(${W/2} ${HT/2}) rotate(${r}) scale(${z}) translate(${-W/2} ${-HT/2})`);g.style.opacity=al;
+ if(g.orbit)g.orbit.setAttribute('transform',`translate(${W/2} ${HT*.46}) rotate(${tt*12})`);
+ for(const a of g.amb)a.e.style.opacity=cl((.45+.5*Math.sin(x*a.sp+a.p)+.3*f.tr)*cl(tt/.8))*.9;
+ g.trl.forEach((e,j)=>e.style.strokeDashoffset=-x*(80+f.a*200)-j*150);
+ const oa=onsetAge(x);g.ring.setAttribute('r',RR*(.6+Math.max(0,oa)*2.4));g.ring.style.opacity=oa>=0&&oa<.5?(1-oa*2)*.5*al:0}
+
+function render(t0){
+ const TT=TL(),E5=Math.max(4,TT-TD);t0=cl(t0,0,TT);
+ $('#svg').style.opacity=Math.min(cl(t0/1.2),cl((TT-t0)/2));
+ let sh='';
+ if(shots.length){const i=idx(t0),s=shots[i],nx=shots[i+1],nt=nx?nx.t0:TT,inn=ease(cl((t0-s.t0)/.6));
+  drawShot(i%2,s,t0,inn,nt);
+  if(inn<1&&i>0)drawShot((i-1)%2,shots[i-1],t0,1-inn,s.t0);else layers[(i+1)%2].style.opacity=0;
+  const dk=c=>mixc(mixc(c,'#000000',.82),PAL[MOOD].bg,.3),pv=i>0?shots[i-1]:s;
+  $('#g0').setAttribute('stop-color',mixc(dk(pv.c0),dk(s.c0),inn));
+  sh='Scene '+(i+1)+'/'+shots.length+': '+s.ms.join(' + ')}
+ const ti=cl((t0-E5-.5)/(TD*.5)),T1=$('#title');
+ T1.style.strokeDashoffset=1700*(1-ease(ti));T1.style.strokeOpacity=ti>0?1:0;T1.setAttribute('fill-opacity',cl((ti-.7)/.3)*.9);
+ $('#sub').style.opacity=cl((t0-E5-TD*.6)/(TD*.25));
+ const show=$('#am').checked;
+ BARS.forEach((e,j)=>{const h=show?4+F(t0-j*.025).a*BH:0;e.setAttribute('d',`M${BX0+j*20},${BY}V${BY-h}`)});
+ $('#scn').textContent=sh;$('#tl').textContent=t0.toFixed(1)+' / '+TT.toFixed(1);subs(t0);if(!playing)sc.value=t0}
+const BARS=[];for(let i=0;i<48;i++)BARS.push(mk('path',{},ampG));
+
+/* ---------- subtitles ---------- */
+const fmt=x=>{const m=Math.floor(x/60);return'['+String(m).padStart(2,'0')+':'+(x-m*60).toFixed(2).padStart(5,'0')+']'};
+function parseLrc(txt){const out=[];let timed=false;
+ for(const s of txt.split('\n').map(s=>s.trim())){const m=s.match(/^\[(\d+):(\d+(?:\.\d+)?)\]\s*(.*)$/);if(m){timed=true;out.push({t:+m[1]*60+ +m[2],x:m[3]})}else out.push({t:null,x:s})}
+ return{out,timed}}
+function applyLy(){const{out,timed}=parseLrc($('#ly').value);
+ if(!timed){const a=+$('#ls').value||0,b=Math.max(a+5,TL()-TD-1),w=out.map(o=>o.x?o.x.length+12:20),sum=w.reduce((p,c)=>p+c,0);let c=0;out.forEach((o,i)=>{o.t=a+(b-a)*c/sum;c+=w[i]})}
+ LY=out.filter(o=>o.t!=null).sort((p,q)=>p.t-q.t);buildShots()}
+function subs(x){let c=-1;for(let j=0;j<LY.length;j++)if(LY[j].t<=x)c=j;let a='',b='',o=0;
+ if(c>=0&&LY[c].x){const L=LY[c],n=LY[c+1],txt=L.x;o=Math.min(cl((x-L.t)/.35),cl(((n?n.t:L.t+6)-x)/.3));
+  if(txt.length>(W>HT?64:34)){const mid=txt.length/2;let k=txt.lastIndexOf(' ',mid);const k2=txt.indexOf(' ',mid);if(k<0||(k2>0&&k2-mid<mid-k))k=k2;if(k>0){a=txt.slice(0,k);b=txt.slice(k+1)}else a=txt}else a=txt}
+ s1.textContent=a;s2.textContent=b;s1.style.opacity=s2.style.opacity=o}
+$('#la').onclick=applyLy;
+$('#lc').onclick=()=>{$('#ly').value='';LY=[];plain=[];sIdx=-1;$('#ln').textContent='';buildShots()};
+const hint=()=>{$('#ln').textContent='Next line: '+plain[sIdx]+'  (tap when it starts)'};
+$('#lst').onclick=()=>{plain=$('#ly').value.split('\n').map(s=>s.trim().replace(/^\[[^\]]*\]\s*/,''));stamps={};sIdx=plain.findIndex(x=>x);if(sIdx<0)return;t=0;seek();play();hint()};
+$('#ltp').onclick=()=>{if(sIdx<0||sIdx>=plain.length)return;stamps[sIdx]=t;sIdx++;while(sIdx<plain.length&&!plain[sIdx])sIdx++;
+ if(sIdx>=plain.length){sIdx=-1;$('#ly').value=plain.map((x,j)=>x&&stamps[j]!=null?fmt(stamps[j])+' '+x:x).join('\n');applyLy();$('#ln').textContent='Done. Timed lyrics are in the box. Copy them into lyrics.lrc.'}else hint()};
+
+/* ---------- playback and controls ---------- */
+const au=new Audio();au.preload='auto';
+function seek(){if(hasA)try{au.currentTime=Math.max(0,aS+t+nud)}catch(e){}}
+function play(){if(t>=TL()-.05)t=0;playing=true;$('#pp').textContent='Pause';if(hasA){seek();au.play().catch(()=>{})}}
+function pause(){playing=false;$('#pp').textContent='Play';au.pause()}
+$('#pp').onclick=()=>playing?pause():play();
+$('#rs').onclick=()=>{t=0;seek();play()};
+sc.oninput=()=>{t=+sc.value;seek()};
+$('#fi').onchange=async e=>{const f=e.target.files[0];if(!f)return;au.src=URL.createObjectURL(f);$('#an').textContent='Analysing '+f.name+'…';
+ try{await loadBuf(await f.arrayBuffer());$('#an').textContent=f.name+' · ready'}catch(err){$('#an').textContent='Could not read this file. Try mp3 or m4a.'}};
+$('#as').oninput=e=>{aS=Math.max(0,+e.target.value||0);setLen();seek()};
+$('#nu').oninput=e=>{nud=+e.target.value;$('#nv').textContent=nud.toFixed(2);seek()};
+$('#sl').oninput=e=>{SL=Math.max(2,+e.target.value||5);buildShots()};
+$('#td').oninput=e=>{TD=Math.max(3,+e.target.value||8);buildShots()};
+$('#cl').onclick=()=>document.body.classList.add('clean');
+$('#stage').onclick=()=>document.body.classList.remove('clean');
+$('#fs').onclick=()=>{const s=$('#stage');(s.requestFullscreen||s.webkitRequestFullscreen||(()=>{})).call(s)};
+const glow=on=>layers.forEach(g=>on?g.setAttribute('filter','url(#gl)'):g.removeAttribute('filter'));
+$('#gw').onchange=e=>glow(e.target.checked);
+$('#tn').oninput=e=>{TITLE=e.target.value;$('#title').textContent=TITLE};
+$('#ta').oninput=e=>{ARTIST=e.target.value;$('#sub').textContent=ARTIST};
+$('#mo').onchange=e=>{MOODSEL=e.target.value;applyMood(MOODSEL==='auto'?(hasA?detectMood():'romantic'):MOODSEL);render(t)};
+function setFormat(l){W=l?1920:1080;HT=l?1080:1920;BX0=l?480:90;BY=l?1068:1860;BH=l?36:90;
+ document.body.classList.toggle('land',l);$('#svg').setAttribute('viewBox',`0 0 ${W} ${HT}`);
+ for(const id of['#bgr','#vgr']){const r=$(id);r.setAttribute('width',W);r.setAttribute('height',HT)}
+ const set=(e,o)=>{for(const k in o)e.setAttribute(k,o[k])};
+ set($('#title'),l?{x:960,y:575,'font-size':250,'letter-spacing':34}:{x:540,y:1000,'font-size':190,'letter-spacing':26});
+ set($('#sub'),l?{x:960,y:690,'font-size':44}:{x:540,y:1090,'font-size':38});
+ [s1,s2].forEach((e,j)=>set(e,{x:W/2,y:l?(j?1005:945):(j?1745:1680)}));buildShots();render(t)}
+$('#fo').onchange=e=>setFormat(e.target.value==='l');
+function tick(now){requestAnimationFrame(tick);const dt=Math.min(.1,(now-last)/1000);last=now;
+ if(playing){if(hasA&&!au.paused)t=au.currentTime-aS-nud;else t+=dt;
+  if(t>=TL()){if($('#lp').checked){t=0;seek();if(hasA)au.play().catch(()=>{})}else{t=TL();pause()}}}
+ render(t)}
+
+/* ---------- in-browser MP4 export (WebCodecs + mp4-muxer) ---------- */
+let ABUF=null;
+async function rasterize(cv,cx){
+ const c=$('#svg').cloneNode(true),fg=getComputedStyle(document.documentElement).getPropertyValue('--fg').trim()||'#f2efe8';
+ c.setAttribute('xmlns',NS);c.setAttribute('width',W);c.setAttribute('height',HT);
+ c.style.cssText+=';fill:none;stroke:'+fg+';stroke-linecap:round;stroke-linejoin:round';
+ const img=new Image();img.src='data:image/svg+xml;charset=utf-8,'+encodeURIComponent(new XMLSerializer().serializeToString(c));
+ await img.decode();cx.drawImage(img,0,0,cv.width,cv.height)}
+async function exportMp4(){
+ const msg=$('#exm'),bar=$('#exp'),cb=$('#exc'),lk=$('#exl'),btn=$('#ex');
+ if(!window.VideoEncoder||!window.Mp4Muxer){msg.textContent='This browser cannot export MP4 here. Use Chrome or Edge, or the make_video.py route.';return}
+ pause();lk.style.display='none';document.body.classList.remove('clean');
+ const q=+$('#exq').value,cw=Math.round(W*q/2)*2,ch=Math.round(HT*q/2)*2,fps=30,N=Math.round(TL()*fps),keep=t;
+ const cv=document.createElement('canvas');cv.width=cw;cv.height=ch;const cx=cv.getContext('2d');
+ let stop=false;cb.onclick=()=>{stop=true};bar.style.display=cb.style.display='';btn.disabled=true;bar.value=0;
+ try{
+  const vb={width:cw,height:ch,bitrate:q<1?4e6:8e6,framerate:fps};let vc=null;
+  for(const c of['avc1.640032','avc1.4d0032','avc1.42003e']){if((await VideoEncoder.isConfigSupported({codec:c,...vb})).supported){vc=c;break}}
+  if(!vc)throw new Error('H.264 encoding is not available in this browser.');
+  let acfg=null,acodec='aac';
+  if(ABUF&&window.AudioEncoder){const sr=ABUF.sampleRate;
+   for(const c of['mp4a.40.2','opus']){const g={codec:c,sampleRate:sr,numberOfChannels:2,bitrate:192000};if((await AudioEncoder.isConfigSupported(g)).supported){acfg=g;acodec=c==='opus'?'opus':'aac';break}}}
+  const target=new Mp4Muxer.ArrayBufferTarget();
+  const muxer=new Mp4Muxer.Muxer({target,video:{codec:'avc',width:cw,height:ch},audio:acfg?{codec:acodec,numberOfChannels:2,sampleRate:acfg.sampleRate}:undefined,fastStart:'in-memory',firstTimestampBehavior:'offset'});
+  let err=null;
+  if(acfg){msg.textContent='Encoding audio…';
+   const ae=new AudioEncoder({output:(c,m)=>muxer.addAudioChunk(c,m),error:e=>{err=e}});ae.configure(acfg);
+   const sr=acfg.sampleRate,off=Math.floor(Math.max(0,aS)*sr),total=Math.min(Math.floor(TL()*sr),ABUF.length-off),a0=ABUF.getChannelData(0),a1=ABUF.numberOfChannels>1?ABUF.getChannelData(1):a0;
+   for(let p=0;p<total&&!err;p+=sr){const n=Math.min(sr,total-p),d=new Float32Array(n*2);d.set(a0.subarray(off+p,off+p+n),0);d.set(a1.subarray(off+p,off+p+n),n);
+    const ad=new AudioData({format:'f32-planar',sampleRate:sr,numberOfFrames:n,numberOfChannels:2,timestamp:Math.round(p/sr*1e6),data:d});ae.encode(ad);ad.close();
+    while(ae.encodeQueueSize>8)await new Promise(r=>setTimeout(r,5))}
+   await ae.flush()}
+  const ve=new VideoEncoder({output:(c,m)=>muxer.addVideoChunk(c,m),error:e=>{err=e}});ve.configure({codec:vc,...vb});
+  const t0=performance.now();
+  for(let f=0;f<N&&!stop&&!err;f++){
+   render(f/fps);await rasterize(cv,cx);
+   const fr=new VideoFrame(cv,{timestamp:Math.round(f*1e6/fps),duration:Math.round(1e6/fps)});ve.encode(fr,{keyFrame:f%60===0});fr.close();
+   while(ve.encodeQueueSize>6)await new Promise(r=>setTimeout(r,5));
+   if(f%10===0){bar.value=f/N;const el=(performance.now()-t0)/1000,eta=el/(f+1)*(N-f-1);msg.textContent=`Rendering frame ${f}/${N} · about ${Math.ceil(eta/60)} min left`;await new Promise(r=>setTimeout(r,0))}}
+  if(err)throw err;
+  if(stop){msg.textContent='Cancelled.'}
+  else{await ve.flush();muxer.finalize();
+   const blob=new Blob([target.buffer],{type:'video/mp4'}),url=URL.createObjectURL(blob);
+   lk.href=url;lk.download=((TITLE||'video').replace(/[^\w\-]+/g,'_'))+(W>HT?'-16x9':'-portrait')+'.mp4';lk.textContent='Download MP4 ('+(blob.size/1048576).toFixed(1)+' MB)';lk.style.display='';
+   msg.textContent=acfg?'Done.':'Done (no audio: load your song first to include sound).';lk.click()}
+ }catch(e){msg.textContent='Export failed: '+(e&&e.message?e.message:e)}
+ bar.style.display=cb.style.display='none';btn.disabled=false;t=keep;render(t)}
+$('#ex').onclick=exportMp4;
+
+/* ---------- API used by render.js ---------- */
+window.loadAudio=async b64=>{const bin=Uint8Array.from(atob(b64),c=>c.charCodeAt(0));await loadBuf(bin.buffer)};
+window.setStart=s=>{aS=s;setLen()};
+window.applyLy=applyLy;
+window.setKeywords=txt=>{KWL=parseLrc(txt).out.filter(o=>o.t!=null);buildShots()};
+window.setMeta=(a,b)=>{TITLE=a;ARTIST=b;$('#title').textContent=a;$('#sub').textContent=b};
+window.renderAt=x=>render(x);
+
+$('#title').textContent=TITLE;$('#sub').textContent=ARTIST;
+const q=new URLSearchParams(location.search);
+if(q.has('seed'))SEED=+q.get('seed')||0;
+if(q.get('mood'))MOODSEL=q.get('mood');
+if(q.get('title'))window.setMeta(q.get('title'),q.get('artist')||'');
+if(q.has('len'))FL=+q.get('len')||0;
+applyMood(MOODSEL==='auto'?'romantic':MOODSEL);
+setFormat(q.has('land'));$('#fo').value=W>HT?'l':'p';
+if(q.has('render')){document.body.classList.add('render');glow(true);render(0)}
+else{setLen();render(0);requestAnimationFrame(tick)}
+</script></body></html>
